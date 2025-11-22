@@ -168,6 +168,35 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Function to handle new user signup (creates profile automatically)
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER 
+SECURITY DEFINER SET search_path = public
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO public.users (id, email, full_name, timezone, booking_slug)
+    VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
+        COALESCE(NEW.raw_user_meta_data->>'timezone', 'UTC'),
+        public.generate_booking_slug(COALESCE(NEW.raw_user_meta_data->>'booking_slug', NEW.raw_user_meta_data->>'full_name', 'user'))
+    );
+    RETURN NEW;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE LOG 'Error in handle_new_user: %', SQLERRM;
+        RETURN NEW;
+END;
+$$;
+
+-- Trigger to automatically create user profile on signup
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW 
+    EXECUTE FUNCTION public.handle_new_user();
+
 -- ============================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ============================================================================
@@ -183,6 +212,10 @@ ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view their own profile"
     ON public.users FOR SELECT
     USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert their own profile"
+    ON public.users FOR INSERT
+    WITH CHECK (auth.uid() = id);
 
 CREATE POLICY "Users can update their own profile"
     ON public.users FOR UPDATE
@@ -235,21 +268,33 @@ CREATE POLICY "Public can view active availability"
     USING (is_active = true);
 
 -- Bookings policies
-CREATE POLICY "Users can view bookings they host"
-    ON public.bookings FOR SELECT
+-- Allow anyone (anon and authenticated) to INSERT bookings
+CREATE POLICY "allow_anon_insert_bookings"
+    ON public.bookings
+    FOR INSERT
+    TO anon, authenticated
+    WITH CHECK (true);
+
+-- Allow users to view bookings they host
+CREATE POLICY "allow_users_view_hosted_bookings"
+    ON public.bookings
+    FOR SELECT
+    TO authenticated
     USING (auth.uid() = host_user_id);
 
-CREATE POLICY "Public can create bookings"
-    ON public.bookings FOR INSERT
-    WITH CHECK (true); -- Anyone can create a booking
-
-CREATE POLICY "Users can update their hosted bookings"
-    ON public.bookings FOR UPDATE
-    USING (auth.uid() = host_user_id);
-
-CREATE POLICY "Users can view their bookings by email"
-    ON public.bookings FOR SELECT
+-- Allow users to view bookings by their email
+CREATE POLICY "allow_users_view_bookings_by_email"
+    ON public.bookings
+    FOR SELECT
+    TO authenticated
     USING (guest_email = (SELECT email FROM public.users WHERE id = auth.uid()));
+
+-- Allow users to update their hosted bookings
+CREATE POLICY "allow_users_update_hosted_bookings"
+    ON public.bookings
+    FOR UPDATE
+    TO authenticated
+    USING (auth.uid() = host_user_id);
 
 -- Notifications policies
 CREATE POLICY "Users can view notifications for their bookings"

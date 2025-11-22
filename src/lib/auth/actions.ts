@@ -20,6 +20,7 @@ export async function signUp(formData: FormData) {
   // Detect timezone (will be updated from client)
   const timezone = 'UTC'
 
+  // Sign up user - the database trigger will automatically create the profile
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
@@ -36,23 +37,7 @@ export async function signUp(formData: FormData) {
     return { error: authError.message }
   }
 
-  if (authData.user) {
-    // Create user profile in public.users table
-    const { error: profileError } = await supabase
-      .from('users')
-      .insert({
-        id: authData.user.id,
-        email,
-        full_name: fullName,
-        timezone,
-        booking_slug: bookingSlug,
-      })
-
-    if (profileError) {
-      return { error: profileError.message }
-    }
-  }
-
+  // Profile is created automatically by database trigger
   redirect('/dashboard')
 }
 

@@ -4,6 +4,7 @@ import { getAvailability } from '@/lib/availability/actions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { AvailabilitySchedule } from '@/components/availability/availability-schedule'
 
 const DAYS: Array<{ value: string; label: string }> = [
   { value: 'MONDAY', label: 'Monday' },
@@ -38,34 +39,8 @@ export default async function AvailabilityPage() {
             Configure when you&apos;re available for meetings
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {DAYS.map((day) => {
-            const daySlots = availability.filter((a: any) => a.day_of_week === day.value)
-            return (
-              <div key={day.value} className="border rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-medium">{day.label}</h3>
-                  <Button size="sm" variant="outline">
-                    Add Time
-                  </Button>
-                </div>
-                {daySlots.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Unavailable</p>
-                ) : (
-                  <div className="space-y-2">
-                    {daySlots.map((slot: any) => (
-                      <div key={slot.id} className="flex items-center justify-between text-sm">
-                        <span>
-                          {slot.start_time.slice(0, 5)} - {slot.end_time.slice(0, 5)}
-                        </span>
-                        <Button size="sm" variant="ghost">Remove</Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+        <CardContent>
+          <AvailabilitySchedule availability={availability} days={DAYS} />
         </CardContent>
       </Card>
 
